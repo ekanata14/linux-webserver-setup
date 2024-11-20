@@ -62,3 +62,24 @@ nvm --version
 
 nvm install node
 
+## Install Postman
+wget https://dl.pstmn.io/download/latest/linux64 -O postman.tar.gz
+
+tar -xvzf postman.tar.gz
+
+sudo mv Postman /opt/postman
+
+sudo ln -s /opt/postman/Postman /usr/bin/postman
+
+postman
+
+sudo nano /usr/share/applications/postman.desktop
+
+[Desktop Entry]
+Name=Postman
+Exec=/opt/postman/Postman
+Icon=/opt/postman/app/resources/app/assets/icon.png
+Type=Application
+Categories=Development;
+
+
