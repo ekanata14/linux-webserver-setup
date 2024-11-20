@@ -1,11 +1,16 @@
-## Install nginx
+# WEBSERVER SETUP LINUX
+I made this notes to help me & you to setup simple webserver on linux. Hope this helps. 
+
+If you have something to make this notes become powerful, don't hesitate to tell me.
+
+## Install nginx (Choose this, no need apache)
 sudo apt install nginx
 
-## Install Apache
-install apache2 = sudo apt install apache2
-start apache = systemctl start apache2
-stop apache = systemctl stop apache2
-checking apache status = systemctl status apache2
+## Install Apache (Choose this, no need nginx)
+sudo apt install apache2
+systemctl start apache2
+systemctl stop apache2
+systemctl status apache2
 
 ## Install PHP
 sudo apt update
