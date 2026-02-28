@@ -22,7 +22,7 @@ echo -e "${BLUE}[2/8] Menginstal PHP 8.4...${NC}"
 # Hindari crash jika PPA sudah ada
 sudo add-apt-repository ppa:ondrej/php -y || true
 sudo apt update
-# Menginstal PHP-FPM dan ekstensi yang sering dibutuhkan framework modern (seperti Laravel 11)
+# Menginstal PHP-FPM dan ekstensi yang sering dibutuhkan framework modern
 sudo apt install -y php8.4-fpm php8.4-mysql php8.4-xml php8.4-curl php8.4-zip php8.4-mbstring php8.4-bcmath php8.4-intl
 
 # 3. Install Nginx
@@ -95,7 +95,8 @@ rm phpMyAdmin-${PMA_VER}-all-languages.zip
 # Konfigurasi phpMyAdmin
 sudo cp "$WEB_ROOT/phpmyadmin/config.sample.inc.php" "$WEB_ROOT/phpmyadmin/config.inc.php"
 RANDOM_SECRET=$(openssl rand -base64 32)
-sudo sed -i "s/\['blowfish_secret'\] = '';/\['blowfish_secret'\] = '$RANDOM_SECRET';/" "$WEB_ROOT/phpmyadmin/config.inc.php"
+# FIX: Menggunakan | sebagai delimiter sed agar aman dari karakter / pada base64
+sudo sed -i "s|\['blowfish_secret'\] = '';|\['blowfish_secret'\] = '$RANDOM_SECRET';|" "$WEB_ROOT/phpmyadmin/config.inc.php"
 
 # 8. Set Permissions (User lokal sebagai owner, www-data sebagai group)
 echo -e "${BLUE}[8/8] Mengatur Permission...${NC}"
@@ -110,7 +111,7 @@ echo -e "${GREEN}Installation Complete!${NC}"
 echo "------------------------------------------------"
 echo "PHP Version      : $(php -v | head -n 1)"
 echo "Nginx            : Running on port 80"
-echo "MySQL            : Running (Cek log di atas jika password gagal diset)"
+echo "MySQL            : Running (User: root, Pass: root)"
 echo "Composer         : $(composer --version | head -n 1)"
 echo "Web Root         : $WEB_ROOT"
 echo "------------------------------------------------"
