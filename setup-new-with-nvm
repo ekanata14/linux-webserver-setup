@@ -1,0 +1,158 @@
+cat << 'EOF' > setup_wsl_stack.sh
+#!/bin/bash
+set -e
+
+# Warna untuk output
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo -e "${BLUE}=== Memulai Setup WSL/Ubuntu 24 Development Stack ===${NC}"
+
+# Meminta akses sudo di awal
+sudo -v
+
+# 1. Update & Install Dependencies Dasar
+echo -e "${BLUE}[1/9] Updating system packages...${NC}"
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y software-properties-common curl wget unzip git
+
+# 2. Install PHP 8.4 (Menggunakan PPA Ondrej Surý)
+echo -e "${BLUE}[2/9] Menginstal PHP 8.4...${NC}"
+sudo add-apt-repository ppa:ondrej/php -y || true
+sudo apt update
+sudo apt install -y php8.4-fpm php8.4-mysql php8.4-xml php8.4-curl php8.4-zip php8.4-mbstring php8.4-bcmath php8.4-intl
+
+# 3. Install Nginx
+echo -e "${BLUE}[3/9] Menginstal Nginx...${NC}"
+sudo apt install -y nginx
+
+WEB_ROOT="/var/www/html"
+echo -e "${BLUE}[INFO] Membuat konfigurasi Nginx PHP di /etc/nginx/sites-available/default...${NC}"
+
+sudo bash -c "cat > /etc/nginx/sites-available/default" << 'NGINX_CONF'
+server {
+    listen 80;
+    server_name localhost;
+    root /var/www/html;
+
+    index index.php index.html index.htm;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ \.php$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/var/run/php/php8.4-fpm.sock;
+    }
+}
+NGINX_CONF
+
+sudo systemctl restart nginx || sudo service nginx restart
+sudo systemctl restart php8.4-fpm || sudo service php8.4-fpm restart
+
+# 4. Install MySQL & Setup User
+echo -e "${BLUE}[4/9] Menginstal MySQL...${NC}"
+sudo apt install -y mysql-server
+sudo systemctl start mysql || sudo service mysql start
+
+echo -e "${BLUE}[INFO] Mengatur MySQL Root & Development User...${NC}"
+DB_DEV_USER="developer"
+DB_DEV_PASS="secret"
+
+sudo mysql <<MYSQL_SCRIPT
+ALTER USER 'root'@'localhost' IDENTIFIED WITH caching_sha2_password BY 'root';
+CREATE USER IF NOT EXISTS '$DB_DEV_USER'@'localhost' IDENTIFIED WITH caching_sha2_password BY '$DB_DEV_PASS';
+GRANT ALL PRIVILEGES ON *.* TO '$DB_DEV_USER'@'localhost' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
+MYSQL_SCRIPT
+
+# 5. Install NVM & Node.js (Terbaru)
+echo -e "${BLUE}[5/9] Menginstal NVM (v0.40.4) & Node.js...${NC}"
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
+
+# Load NVM untuk sesi instalasi
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+echo -e "${BLUE}[INFO] Menginstal Node.js versi terbaru...${NC}"
+nvm install node
+nvm alias default node
+
+# 6. Install Composer
+echo -e "${BLUE}[6/9] Menginstal Composer...${NC}"
+curl -sS https://getcomposer.org/installer -o /tmp/composer-setup.php
+sudo php /tmp/composer-setup.php --install-dir=/usr/local/bin --filename=composer
+rm /tmp/composer-setup.php
+
+# 7. Install phpMyAdmin
+echo -e "${BLUE}[7/9] Menginstal phpMyAdmin...${NC}"
+PMA_VER="5.2.1"
+cd /tmp
+curl -O -L https://files.phpmyadmin.net/phpMyAdmin/${PMA_VER}/phpMyAdmin-${PMA_VER}-all-languages.zip
+unzip -q phpMyAdmin-${PMA_VER}-all-languages.zip
+sudo rm -rf "$WEB_ROOT/phpmyadmin"
+sudo mv phpMyAdmin-${PMA_VER}-all-languages "$WEB_ROOT/phpmyadmin"
+rm phpMyAdmin-${PMA_VER}-all-languages.zip
+
+# Konfigurasi phpMyAdmin
+sudo cp "$WEB_ROOT/phpmyadmin/config.sample.inc.php" "$WEB_ROOT/phpmyadmin/config.inc.php"
+RANDOM_SECRET=$(openssl rand -base64 32)
+sudo sed -i "s|\['blowfish_secret'\] = '';|\['blowfish_secret'\] = '$RANDOM_SECRET';|" "$WEB_ROOT/phpmyadmin/config.inc.php"
+
+# 8. Set Permissions
+echo -e "${BLUE}[8/9] Mengatur Permission...${NC}"
+sudo chown -R $USER:www-data "$WEB_ROOT"
+sudo chmod -R 775 "$WEB_ROOT"
+echo "<?php phpinfo(); ?>" > "$WEB_ROOT/info.php"
+
+# 9. Buat File Credentials
+echo -e "${BLUE}[9/9] Membuat file kredensial di Home Directory...${NC}"
+CRED_FILE="$HOME/wsl_stack_credentials.txt"
+cat << CRED_EOF > "$CRED_FILE"
+================================================
+  WSL/UBUNTU DEVELOPMENT STACK CREDENTIALS
+================================================
+Generated on: $(date)
+
+[ DATABASE (MySQL) ]
+Root User       : root
+Root Password   : root
+
+Dev User        : $DB_DEV_USER
+Dev Password    : $DB_DEV_PASS
+(Gunakan Dev User ini untuk file .env project agar lebih aman)
+
+[ WEB SERVER & PATHS ]
+Web Root Dir    : $WEB_ROOT
+PHP Info        : http://localhost/info.php
+phpMyAdmin      : http://localhost/phpmyadmin
+
+[ INSTALLED VERSIONS ]
+PHP Version     : $(php -v | head -n 1 | awk '{print $2}')
+Node.js Version : $(node -v)
+NPM Version     : $(npm -v)
+Composer Version: $(composer --version | head -n 1 | awk '{print $3}')
+================================================
+CRED_EOF
+
+echo "------------------------------------------------"
+echo -e "${GREEN}Instalasi Selesai!${NC}"
+echo "------------------------------------------------"
+echo -e "PHP Version      : ${YELLOW}$(php -v | head -n 1 | awk '{print $2}')${NC}"
+echo -e "Node.js Version  : ${YELLOW}$(node -v)${NC}"
+echo -e "MySQL User Dev   : ${YELLOW}$DB_DEV_USER${NC} (Pass: ${YELLOW}$DB_DEV_PASS${NC})"
+echo -e "Credentials File : ${YELLOW}$CRED_FILE${NC}"
+echo "------------------------------------------------"
+echo -e "${GREEN}Akses Dashboard:${NC}"
+echo "1. Cek PHP       : http://localhost/info.php"
+echo "2. phpMyAdmin    : http://localhost/phpmyadmin"
+echo "------------------------------------------------"
+echo -e "${YELLOW}CATATAN PENTING:${NC}"
+echo "Jalankan perintah 'source ~/.bashrc' (atau ~/.zshrc jika memakai zsh)"
+echo "sekarang juga agar perintah 'nvm', 'node', dan 'npm' langsung dikenali di terminal ini."
+EOF
+
+chmod +x setup_wsl_stack.sh && ./setup_wsl_stack.sh
